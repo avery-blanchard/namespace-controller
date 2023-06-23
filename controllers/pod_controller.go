@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"os/exec"
@@ -70,10 +69,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		// Grab container PID from ID
 		command := fmt.Sprintf("docker inspect -f '{{.State.Pid}}' %s", id)
 		pid, err := exec.Command(command).Output()
-
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		// Get Linux CGroup from PID
 		cgroupPath := fmt.Sprintf("/proc/%d/ns/cgroup", pid)
 		symlink, err := os.Readlink(cgroupPath)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
 		// Parse NS
 		split = strings.Split(symlink, "[")
