@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"os/exec"
@@ -55,6 +56,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	status = pod.Status
 	containers := status.ContainerStatuses
 
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+
 	// Iterate over containers
 	for _, container := range containers {
 		// Parse container ID
@@ -76,15 +81,13 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		ns := split[0]
 
 		// Append Pod annotations, mapping container ID to PID and/or NS
-		pod.Metadata.Annotations[id] = ns
-
+		pod.Labels[id] = ns
 	}
 
-	// Update pod 
+	// Update pod
 	if err := r.Update(ctx, &pod); err != nil {
- 	       log.Error(err, "unable to update Pod")
-        	return ctrl.Result{}, err
-    	}	
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
