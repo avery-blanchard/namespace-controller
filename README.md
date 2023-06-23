@@ -1,4 +1,4 @@
-# namespace-controller
+# Namespace Controller
 Controller to annontate Linux namespaces + PID to containers
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.

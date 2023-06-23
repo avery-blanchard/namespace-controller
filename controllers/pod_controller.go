@@ -46,7 +46,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	_ = log.FromContext(ctx)
 
 	var pod corev1.Pod
-	var stats corev1.PodStatus
+	var status corev1.PodStatus
    	var containers corev1.containerStatuses[]
 
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
@@ -79,7 +79,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
         	split = strings.Split(split[1], "]")
        		ns := split[0]
 
-		// TODO: Annotate (where???)
+		// Append Pod annotations, mapping container ID to PID and/or NS
+		pod.metadata.annotations[id] = [pid, ns]
 
 	}
 
