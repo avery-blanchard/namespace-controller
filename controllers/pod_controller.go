@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
-
+	"os"
+	"os/exec"
+	"strings"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,18 +46,42 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	_ = log.FromContext(ctx)
 
 	var pod corev1.Pod
-   	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+	var stats corev1.PodStatus
+   	var containers corev1.containerStatuses[]
+
+	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
             		return ctrl.Result{}, nil
         	}
         	log.Error(err, "unable to fetch Pod")
        	 	return ctrl.Result{}, err
     	}
-	// iterate over pod containers
-	// parse container ID
-	// use crictl or docker top to grab PID
-	// parse NS from PID
-	// add container annotations for both 
+	status := pod.status
+	containers := status.containerStatueses
+
+	// Iterate over containers
+	for _, container := range containers {
+		// Parse container ID
+		id := container.containerID
+		split := string.split(id, "/")
+		id := split[2][:12]
+
+		// Grab container PID from ID
+		command := fmt.Sprintf("docker inspect -f '{{.State.Pid}}' %s", id)
+		pid := exec.Command(command).Output()
+
+		// Get Linux CGroup from PID
+		cgroupPath := fmt.Sprintf("/proc/%d/ns/cgroup", pid)
+       		symlink, err := os.Readlink(cgroupPath)
+
+		// Parse NS
+		split = strings.Split(symlink, "[")
+        	split = strings.Split(split[1], "]")
+       		ns := split[0]
+
+		// TODO: Annotate (where???)
+
+	}
 
 	return ctrl.Result{}, nil
 }
