@@ -78,7 +78,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		command := fmt.Sprintf("docker inspect -f '{{.State.Pid}}' %s", id)
 		pid, err := exec.Command("/bin/sh", "-c", command).Output()
 		if err != nil {
-			fmt.Printf("Docker inspect fails for id %s in pod %s\n", id, pod.Name)
 			return ctrl.Result{}, nil
 		}
 		// Get Linux CGroup from PID
@@ -89,7 +88,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 		symlink, err := os.Readlink(cgroupPath)
 		if err != nil {
-			fmt.Printf("Read Link fails for pid %s in pod %s\n", pid_str, pod.Name)
 			return ctrl.Result{}, nil
 		}
 
