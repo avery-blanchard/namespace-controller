@@ -68,9 +68,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		// Parse container ID
 		id := container.ContainerID
 		split := strings.Split(id, "/")
-		if len(split) <= 12 {
+		if len(split) < 3 {
 			return ctrl.Result{}, nil
 		}
+
 		id = split[2][:12]
 
 		// Grab container PID from ID
@@ -82,9 +83,9 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		// Get Linux CGroup from PID
 		pid_str := fmt.Sprintf("%s", pid)
 		pid_str = strings.ReplaceAll(pid_str, "\n", "")
-		
+
 		cgroupPath := fmt.Sprintf("/proc/%s/ns/cgroup", pid_str)
-		
+
 		symlink, err := os.Readlink(cgroupPath)
 		if err != nil {
 			return ctrl.Result{}, nil
@@ -95,9 +96,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		split = strings.Split(split[1], "]")
 		ns := split[0]
 
+		fmt.Printf("POD %s: symlink %s,pid: %s, cgroup path %s, ns: %s\n", pod.Name, symlink, cgroupPath, pid_str, ns)
+
 		// Append Pod annotations, mapping container ID to PID and/or NS
 		pod.Annotations[pid_str] = ns
-		fmt.Printf("symlink %s,pid: %s, cgroup path %s, ns: %s\n", symlink, cgroupPath, pid_str, ns)
 
 	}
 
