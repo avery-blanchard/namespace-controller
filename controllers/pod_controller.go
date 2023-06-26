@@ -36,8 +36,7 @@ type PodReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -58,11 +57,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	status = pod.Status
 	containers := status.ContainerStatuses
-
-	if pod.Annotations == nil {
-		pod.Annotations = make(map[string]string)
+	ann := pod.ObjectMeta.Annotations
+	if ann == nil {
+		ann = make(map[string]string)
 	}
 
+	fmt.Printf("Annotating pod %s\n", pod.Name)
 	// Iterate over containers
 	for _, container := range containers {
 		// Parse container ID
@@ -78,6 +78,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		command := fmt.Sprintf("docker inspect -f '{{.State.Pid}}' %s", id)
 		pid, err := exec.Command("/bin/sh", "-c", command).Output()
 		if err != nil {
+			fmt.Printf("Docker inspect fails for id %s in pod %s\n", id, pod.Name)
 			return ctrl.Result{}, nil
 		}
 		// Get Linux CGroup from PID
@@ -88,6 +89,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 		symlink, err := os.Readlink(cgroupPath)
 		if err != nil {
+			fmt.Printf("Read Link fails for pid %s in pod %s\n", pid_str, pod.Name)
 			return ctrl.Result{}, nil
 		}
 
@@ -96,12 +98,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		split = strings.Split(split[1], "]")
 		ns := split[0]
 
-		fmt.Printf("POD %s: symlink %s,pid: %s, cgroup path %s, ns: %s\n", pod.Name, symlink, cgroupPath, pid_str, ns)
+		fmt.Printf("PID: %s, Linux NS: %s\n", pid_str, ns)
 
 		// Append Pod annotations, mapping container ID to PID and/or NS
-		pod.Annotations[pid_str] = ns
+		ann[pid_str] = ns
 
 	}
+
+	pod.ObjectMeta.Annotations = ann
 
 	// Update pod
 	if err := r.Update(ctx, &pod); err != nil {
