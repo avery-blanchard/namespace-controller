@@ -62,7 +62,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		ann = make(map[string]string)
 	}
 
-	fmt.Printf("Annotating pod %s\n", pod.Name)
 	// Iterate over containers
 	for _, container := range containers {
 		// Parse container ID
@@ -96,7 +95,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		split = strings.Split(split[1], "]")
 		ns := split[0]
 
-		fmt.Printf("PID: %s, Linux NS: %s\n", pid_str, ns)
 
 		// Append Pod annotations, mapping container ID to PID and/or NS
 		ann[pid_str] = ns
