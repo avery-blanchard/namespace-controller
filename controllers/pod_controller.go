@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"os/exec"
@@ -37,7 +38,6 @@ type PodReconciler struct {
 
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -50,13 +50,17 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	var status corev1.PodStatus
 
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	}
+
 	status = pod.Status
 	containers := status.ContainerStatuses
 
-	if pod.Labels == nil {
-		pod.Labels = make(map[string]string)
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
 	}
 
 	// Iterate over containers
@@ -64,19 +68,26 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		// Parse container ID
 		id := container.ContainerID
 		split := strings.Split(id, "/")
+		if len(split) <= 12 {
+			return ctrl.Result{}, nil
+		}
 		id = split[2][:12]
 
 		// Grab container PID from ID
 		command := fmt.Sprintf("docker inspect -f '{{.State.Pid}}' %s", id)
-		pid, err := exec.Command(command).Output()
+		pid, err := exec.Command("/bin/sh", "-c", command).Output()
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		// Get Linux CGroup from PID
-		cgroupPath := fmt.Sprintf("/proc/%d/ns/cgroup", pid)
+		pid_str := fmt.Sprintf("%s", pid)
+		pid_str = strings.ReplaceAll(pid_str, "\n", "")
+		
+		cgroupPath := fmt.Sprintf("/proc/%s/ns/cgroup", pid_str)
+		
 		symlink, err := os.Readlink(cgroupPath)
 		if err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		// Parse NS
@@ -85,14 +96,25 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		ns := split[0]
 
 		// Append Pod annotations, mapping container ID to PID and/or NS
-		pod.Labels[id] = ns
+		pod.Annotations[pid_str] = ns
+		fmt.Printf("symlink %s,pid: %s, cgroup path %s, ns: %s\n", symlink, cgroupPath, pid_str, ns)
+
 	}
 
 	// Update pod
 	if err := r.Update(ctx, &pod); err != nil {
+		if apierrors.IsConflict(err) {
+			// The Pod has been updated since we read it.
+			// Requeue the Pod to try to reconciliate again.
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if apierrors.IsNotFound(err) {
+			// The Pod has been deleted since we read it.
+			// Requeue the Pod to try to reconciliate again.
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
-
 	return ctrl.Result{}, nil
 }
 
